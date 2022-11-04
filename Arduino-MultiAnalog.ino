@@ -9,7 +9,7 @@ int vals[NUM_PINS];
 int sentVals[NUM_PINS];
 bool activePins[NUM_PINS] = {true, false, false, false, false, false};
 
-const int threshold = 1; // threshold for sending data
+int threshold = 2; // threshold for sending data
 
 // make sure we can read strings
 void received(char*);
@@ -30,19 +30,30 @@ void setup() {
 
 void received(char *line) {
   String s = String(line);
-  if(s.length() != 14) {
-    Serial.println("E:SetPins Format: SetPins:XXXXXX");
-    return;
-  }
-  if(s.substring(0, 7) == "SetPins") {
-    Serial.println("U:PinOuts");
-    // get bool values
-    for(int i = 0; i < NUM_PINS; i++){
-      String inputString = s.substring(8 + i, 9 + i);
+
+  if(s.length() == 14) {
+    if(s.substring(0, 7) == "SetPins") {
+      Serial.println("U:PinOuts");
+      // get bool values
+      for(int i = 0; i < NUM_PINS; i++){
+        String inputString = s.substring(8 + i, 9 + i);
+        int val = inputString.toInt();
+        //Serial.println(String(i) + ":" + String(val));
+        // set active
+        activePins[i] = val == 1 ? true : false;
+      }
+    } else {
+      Serial.println("E:SetPins Format: SetPins:XXXXXX");
+      return;
+    }
+  } else if(s.length() == 6){
+    if(s.substring(0, 4) == "SetT") {
+      Serial.println("U:Treshold");
+      String inputString = s.substring(5, 6);
       int val = inputString.toInt();
-      //Serial.println(String(i) + ":" + String(val));
-      // set active
-      activePins[i] = val == 1 ? true : false;
+      threshold = val;
+    } else {
+      Serial.println("E:SetT Format: SetT:X");      
     }
   }
 	//Serial.println(line);
