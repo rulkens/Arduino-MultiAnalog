@@ -1,13 +1,29 @@
 #include <serial-readline.h>
 
-const int NUM_PINS = 6;
-// the analog pins to read out
-int pins[NUM_PINS] = {A0, A1, A2, A3, A4, A5};
+const char* DEVICE_ID = "ANALOG_5_01";
+// set the board type
+#define BOARD_TYPE_NANO
+
+#ifdef BOARD_TYPE_NANO
+// Arduino Uno has 6, Arduino Nano Every has 8
+const int NUM_PINS = 8;
+// Nano every pinout
+int pins[NUM_PINS] = {A0, A1, A2, A3, A4, A5, A6, A7};
+bool activePins[NUM_PINS] = {true, true, true, true, true, false, false, false};
+#endif
+
+#ifdef BOARD_TYPE_PICO
+// Raspberry Pi Pico has 3 (ADC0, ADC1, ADC2)
+const int NUM_PINS = 3;
+// Pico pinout
+int pins[NUM_PINS] = {26, 27, 28};
+bool activePins[NUM_PINS] = {true, true, false};
+#endif
+
 // the current value of the pins
 int vals[NUM_PINS];
 // the last sent values
 int sentVals[NUM_PINS];
-bool activePins[NUM_PINS] = {true, false, false, false, false, false};
 
 int threshold = 2; // threshold for sending data
 
@@ -26,12 +42,25 @@ void setup() {
   digitalWrite(LED_BUILTIN, HIGH);
   delay(500);
   digitalWrite(LED_BUILTIN, LOW);
+
+  // set some output pins to 5V so we can use them
+  pinMode(8, OUTPUT);
+  pinMode(9, OUTPUT);
+  pinMode(10, OUTPUT);
+  pinMode(11, OUTPUT);
+
+  digitalWrite(8, HIGH);
+  digitalWrite(9, HIGH);
+  digitalWrite(10, HIGH);
+  digitalWrite(11, HIGH);
+
 }
 
 void received(char *line) {
   String s = String(line);
 
-  if(s.length() == 14) {
+  // @TODO: make this dependent on the number of pinouts
+  if(s.length() == 16) {
     if(s.substring(0, 7) == "SetPins") {
       Serial.println("U:PinOuts");
       // get bool values
@@ -43,7 +72,7 @@ void received(char *line) {
         activePins[i] = val == 1 ? true : false;
       }
     } else {
-      Serial.println("E:SetPins Format: SetPins:XXXXXX");
+      Serial.println("E:SetPins Format: SetPins:XXXXXXXX");
       return;
     }
   } else if(s.length() == 6){
@@ -55,14 +84,20 @@ void received(char *line) {
     } else {
       Serial.println("E:SetT Format: SetT:X");      
     }
+  } else if(s.length() == 5) {
+    if(s.substring(0, 5) == "GetID") {
+      Serial.print("U:ID:");
+      Serial.println(DEVICE_ID);
+    }
   }
 	//Serial.println(line);
 }
 
 void loop() {
   reader.poll();
+  // poll every 10 ms
   delay(10);
-  for(int i =0; i < NUM_PINS; i++){
+  for(int i = 0; i < NUM_PINS; i++){
     // if the pin is not active, dont update or send anything
     if(activePins[i] != true) continue;
 
