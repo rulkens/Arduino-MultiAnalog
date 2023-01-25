@@ -2,9 +2,9 @@
 
 // default 2 pin setup
 // make sure to change this between devices
-const char* DEVICE_ID = "ANALOG_5_01";
-#define FIVE_PIN_SETUP
-// #define TWO_PIN_SETUP
+const char* DEVICE_ID = "ANALOG_2_01";
+// #define FIVE_PIN_SETUP
+#define TWO_PIN_SETUP
 
 // five pin setup
 //const char* DEVICE_ID = "ANALOG_5_01";
@@ -38,11 +38,18 @@ bool activePins[NUM_PINS] = {true, true, false};
 #endif
 
 // the current value of the pins
-int vals[NUM_PINS];
-// the last sent values
-int sentVals[NUM_PINS];
+uint16_t vals[NUM_PINS];
 
-int threshold = 2; // threshold for sending data
+// multi-sampling the analog input.
+const uint8_t NUM_SAMPLES = 6;
+uint16_t sampleVals[NUM_PINS * NUM_SAMPLES];
+// the last sent values
+uint16_t sentVals[NUM_PINS];
+
+uint8_t threshold = 3; // threshold for sending data
+
+// delay time between each frame. 60FPS should really be enough, right?
+const uint8_t FRAMERATE = 17; // 17ms -> ~60FPS
 
 // make sure we can read strings
 void received(char*);
@@ -80,9 +87,9 @@ void received(char *line) {
     if(s.substring(0, 7) == "SetPins") {
       Serial.println("U:PinOuts");
       // get bool values
-      for(int i = 0; i < NUM_PINS; i++){
+      for(uint8_t i = 0; i < NUM_PINS; i++){
         String inputString = s.substring(8 + i, 9 + i);
-        int val = inputString.toInt();
+        uint16_t val = inputString.toInt();
         //Serial.println(String(i) + ":" + String(val));
         // set active
         activePins[i] = val == 1 ? true : false;
@@ -95,7 +102,7 @@ void received(char *line) {
     if(s.substring(0, 4) == "SetT") {
       Serial.println("U:Treshold");
       String inputString = s.substring(5, 6);
-      int val = inputString.toInt();
+      uint16_t val = inputString.toInt();
       threshold = val;
     } else {
       Serial.println("E:SetT Format: SetT:X");      
@@ -109,7 +116,7 @@ void received(char *line) {
     if(s.substring(0, 7) == "GetPins") {
       Serial.print("I:Pins:");
       String pinOut = "";
-      for(int i = 0; i < NUM_PINS; i++){
+      for(uint8_t i = 0; i < NUM_PINS; i++){
         
         //Serial.println(String(i) + ":" + String(val));
         // set active
@@ -132,23 +139,46 @@ void printVals() {
   }
 }
 
+void sampleOnce(uint8_t index) {
+  for(uint8_t i = 0; i < NUM_PINS; i++){
+    // if the pin is not active, dont update or send anything
+    if(activePins[i] != true) continue;
+    else {
+      uint16_t curVal = analogRead(pins[i]);  // read the input pin
+      sampleVals[i + index * NUM_PINS] = curVal;
+    }
+  }
+}
+
+void sample() {
+  for(uint8_t i = 0; i < NUM_SAMPLES; i++) {
+    sampleOnce(i);
+    delay(1);
+  }
+  // calculate value from samples
+  for(uint8_t i = 0; i < NUM_PINS; i++) {
+    vals[i] = 0;
+    for(uint8_t j = 0; j < NUM_SAMPLES; j++) {
+      vals[i] += sampleVals[j * NUM_PINS + i];
+    }
+    vals[i] /= NUM_SAMPLES;
+  }
+}
+
 void loop() {
   reader.poll();
-  // poll every 10 ms
-  delay(10);
-  for(int i = 0; i < NUM_PINS; i++){
+
+  delay(FRAMERATE - NUM_SAMPLES);
+  sample();
+
+  for(uint8_t i = 0; i < NUM_PINS; i++){
     // if the pin is not active, dont update or send anything
     if(activePins[i] != true) continue;
 
-    int curVal = analogRead(pins[i]);  // read the input pin
-
-    if(curVal != vals[i]) {
-      vals[i] = curVal;
-      if(abs(sentVals[i] - vals[i]) > threshold) {
-        // send again
-        Serial.println("OUT:" + String(i) + ":" + String(vals[i]));
-        sentVals[i] = vals[i];
-      }
+    if(abs(sentVals[i] - vals[i]) > threshold) {
+      // send again
+      Serial.println("OUT:" + String(i) + ":" + String(vals[i]));
+      sentVals[i] = vals[i];
     }
   }
 }
