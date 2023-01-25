@@ -1,6 +1,14 @@
 #include <serial-readline.h>
 
+// default 2 pin setup
+// make sure to change this between devices
 const char* DEVICE_ID = "ANALOG_5_01";
+#define FIVE_PIN_SETUP
+// #define TWO_PIN_SETUP
+
+// five pin setup
+//const char* DEVICE_ID = "ANALOG_5_01";
+
 // set the board type
 #define BOARD_TYPE_NANO
 
@@ -9,7 +17,16 @@ const char* DEVICE_ID = "ANALOG_5_01";
 const int NUM_PINS = 8;
 // Nano every pinout
 int pins[NUM_PINS] = {A0, A1, A2, A3, A4, A5, A6, A7};
-bool activePins[NUM_PINS] = {true, true, true, true, true, false, false, false};
+
+// 2 pin setup
+#ifdef TWO_PIN_SETUP
+  bool activePins[NUM_PINS] = {true, true, false, false, false, false, false, false};
+#endif
+
+// five pin setup
+#ifdef FIVE_PIN_SETUP
+  bool activePins[NUM_PINS] = {false, true, true, true, true, true, false, false};
+#endif
 #endif
 
 #ifdef BOARD_TYPE_PICO
@@ -53,7 +70,6 @@ void setup() {
   digitalWrite(9, HIGH);
   digitalWrite(10, HIGH);
   digitalWrite(11, HIGH);
-
 }
 
 void received(char *line) {
@@ -86,11 +102,34 @@ void received(char *line) {
     }
   } else if(s.length() == 5) {
     if(s.substring(0, 5) == "GetID") {
-      Serial.print("U:ID:");
+      Serial.print("I:ID:");
       Serial.println(DEVICE_ID);
     }
+  } else if(s.length() == 7) {
+    if(s.substring(0, 7) == "GetPins") {
+      Serial.print("I:Pins:");
+      String pinOut = "";
+      for(int i = 0; i < NUM_PINS; i++){
+        
+        //Serial.println(String(i) + ":" + String(val));
+        // set active
+        pinOut += activePins[i] == true ? "1" : "0";
+      }
+      Serial.println(pinOut);
+    }
+    if(s.substring(0, 7) == "GetVals") {
+      printVals();
+    }
   }
-	//Serial.println(line);
+}
+
+void printVals() {
+  for(int i = 0; i < NUM_PINS; i++){
+  // if the pin is not active, dont update or send anything
+    if(activePins[i] != true) continue;
+    int curVal = analogRead(pins[i]);  // read the input pin
+    Serial.println("OUT:" + String(i) + ":" + String(vals[i]));
+  }
 }
 
 void loop() {
